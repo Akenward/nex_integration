@@ -16,5 +16,6 @@
   "loggers": ["nex_element"],
   "requirements": [],
   "ssdp": [],
-  "zeroconf": []
+  "zeroconf": [],
+  "version": "0.1.0"
 }

@@ -6,6 +6,7 @@ import datetime
 import logging
 import re
 from uuid import UUID
+from homeassistant.components import bluetooth
 
 from bleak import BleakClient
 
@@ -14,6 +15,7 @@ from bleak import BleakClient
 from bleak.backends.characteristic import BleakGATTCharacteristic
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
+from homeassistant.core import HomeAssistant
 
 from .const import (
     CONF_TIMEOUT,
@@ -32,7 +34,9 @@ _LOGGER = logging.getLogger(__name__)
 class NexBTDevice:
     """NEX BT Device Class."""
 
-    def __init__(self, ble_device: BLEDevice, power, unit_cost) -> None:
+    def __init__(
+        self, hass: HomeAssistant, ble_device: BLEDevice, power, unit_cost
+    ) -> None:
         """Initialise properties."""
         self._ble_device = ble_device
         self._client: BleakClient | None = None
@@ -47,6 +51,9 @@ class NexBTDevice:
         self.power = power
         self.unit_cost = unit_cost
         self.device_data: dict = {}
+        self._address = ble_device.address
+        self._hass = hass
+        self._response_received = asyncio.Event()
 
     @property
     def connected(self) -> bool:
@@ -55,8 +62,11 @@ class NexBTDevice:
 
     async def _async_get_connection(self) -> None:
         """Open connection and subscribe to notifications."""
+        self._ble_device = bluetooth.async_ble_device_from_address(
+            self._hass, self._address.upper(), True
+        )
         async with self._lock:
-            if not self._client:
+            if self._client is None or not self._client.is_connected:
                 _LOGGER.debug("Connecting")
                 try:
                     self._client = await self._client_stack.enter_async_context(
@@ -120,13 +130,19 @@ class NexBTDevice:
 
     async def _async_update_status(self) -> dict:
         """Send hello message to device and return device status data."""
-        if not (self.connected):
-            await self._async_get_connection()
+        # if not (self.connected):
+        await self._async_get_connection()
         if self._client is not None:
             hello_message = self._hello_message()
             _LOGGER.debug("Send hello message")
+            self._response_received.clear()
             await self._client.write_gatt_char(WRITE_UUID, hello_message, False)
-            await asyncio.sleep(2)
+            try:
+                async with asyncio.timeout(20):
+                    await self._response_received.wait()
+            except TimeoutError:
+                _LOGGER.debug("Took too long to collect element data")
+
             await self._client.disconnect()
             _LOGGER.debug("Energy used is %f", self.device_data.get("energy_used"))
         return self.device_data
@@ -165,10 +181,12 @@ class NexBTDevice:
         if self.message_next >= self.status_size[self.status_message]:
             # message data is complete
             if self.status_message == MSG_STATUS:
-                self._process_update()
-            self.status_message = MSG_NONE
+                self.status_message = MSG_NONE
+                if self._process_update():
+                    _LOGGER.debug("Update complete and saved")
+                    self._response_received.set()
 
-    def _process_update(self) -> None:
+    def _process_update(self) -> bool:
         op_time = int.from_bytes(self.status_string[35:37], "big")
         self.device_data = {
             "current_mode": self.status_string[1],
@@ -178,6 +196,7 @@ class NexBTDevice:
             "upper_temp_limit": float(self.status_string[7]),
             "energy_used": float(op_time * int(self.power) / 60000),
         }
+        return True
 
     async def async_update_status(self):
         "Call method to update entity status."

@@ -42,7 +42,7 @@ class NexBTCoordinator(DataUpdateCoordinator):
             # update_method=self._async_nex_update_data,
             # mode = bluetooth.BluetoothScanningMode.ACTIVE,
             # connectable=connectable,
-            update_interval=timedelta(minutes=5),
+            update_interval=timedelta(seconds=30),
             always_update=True,
         )
         self.ble_device = ble_device
@@ -50,13 +50,13 @@ class NexBTCoordinator(DataUpdateCoordinator):
         # self.device_name = device_name
         self._ready_event = asyncio.Event()
         self._was_unavailable = True  #
-        self.data = {}
+        # self.data = {}
 
     @callback
     def _needs_poll(
         self,
         service_info: bluetooth.BluetoothServiceInfoBleak,
-        seconds_since_last_poll: int | None,
+        seconds_since_last_poll: float | None,
     ) -> bool:
         # Only poll if hass is running, we need to poll,
         # and we actually have a way to connect to the device
@@ -73,7 +73,7 @@ class NexBTCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict:
         """Poll the device."""
-        async with asyncio.timeout(10):
+        async with asyncio.timeout(25):
             return await self.device.async_update_status()
 
     async def async_wait_ready(self) -> bool:

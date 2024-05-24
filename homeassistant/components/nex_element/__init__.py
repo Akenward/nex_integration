@@ -46,7 +46,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
     power = entry.data["power"]
     unit_cost = entry.data["unit_cost"]
-    nex_device = NexBTDevice(ble_device, power, unit_cost)
+    nex_device = NexBTDevice(hass, ble_device, power, unit_cost)
 
     coordinator = NexBTCoordinator(
         hass,
@@ -66,16 +66,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    # entry.async_on_unload(coordinator.async_add_listener(_async_update_listener))
-
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _LOGGER.debug("Listeners keys %s: ", list(coordinator._listeners.keys()))
 
     return True
 
 
-# async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-#     """Handle options update."""
-#     await hass.config_entries.async_reload(entry.entry_id)
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Set up a listener for entry changes."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
