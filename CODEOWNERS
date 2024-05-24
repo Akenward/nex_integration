@@ -903,6 +903,8 @@ build.json @home-assistant/supervisor
 /tests/components/netgear_lte/ @tkdrob
 /homeassistant/components/network/ @home-assistant/core
 /tests/components/network/ @home-assistant/core
+/homeassistant/components/nex_element/ @Akenward
+/tests/components/nex_element/ @Akenward
 /homeassistant/components/nexia/ @bdraco
 /tests/components/nexia/ @bdraco
 /homeassistant/components/nextbus/ @vividboarder

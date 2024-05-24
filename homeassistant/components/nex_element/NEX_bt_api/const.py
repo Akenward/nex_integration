@@ -1,0 +1,11 @@
+"""UUIDs for communication with NEX device."""
+
+WRITE_UUID = "d973f2e2-b19e-11e2-9e96-0800200c9a66"
+NOTIFY_UUID = "d973f2e1-b19e-11e2-9e96-0800200c9a66"
+
+""" NEX message types """
+MSG_ACKNOWLEDGE = 0
+MSG_STATUS = 1
+MSG_SCHEDULE = 2
+MSG_NONE = 9
+CONF_TIMEOUT = 5

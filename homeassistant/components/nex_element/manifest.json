@@ -1,0 +1,20 @@
+{
+  "domain": "nex_element",
+  "name": "Nex Heated Rail",
+  "bluetooth": [
+    {
+      "local_name": "NEX 1.0"
+    }
+  ],
+  "codeowners": ["@Akenward"],
+  "config_flow": true,
+  "dependencies": ["bluetooth_adapters"],
+  "documentation": "https://www.home-assistant.io/integrations/nex_element",
+  "homekit": {},
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "loggers": ["nex_element"],
+  "requirements": [],
+  "ssdp": [],
+  "zeroconf": []
+}

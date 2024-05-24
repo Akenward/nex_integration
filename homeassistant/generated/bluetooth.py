@@ -449,6 +449,10 @@ BLUETOOTH: list[dict[str, bool | str | int | list[int]]] = [
         "local_name": "MOTION_*",
     },
     {
+        "domain": "nex_element",
+        "local_name": "NEX 1.0",
+    },
+    {
         "domain": "oralb",
         "manufacturer_id": 220,
     },
