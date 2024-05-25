@@ -26,6 +26,7 @@ from .const import (
     MSG_STATUS,
     NOTIFY_UUID,
     WRITE_UUID,
+    MAX_CONNECTION_RETRIES,
 )
 from .exceptions import BleakConnectionFailure, BleakTimeout
 
@@ -55,47 +56,63 @@ class NexBTDevice:
         self._address = ble_device.address
         self._hass = hass
         self._response_received = asyncio.Event()
+        self._connection_established = asyncio.Event()
 
     @property
     def connected(self) -> bool:
         """Check for connection."""
-        return self._client is not None
+        return self._client is not None and self._client.is_connected
 
-    async def _async_get_connection(self) -> None:
+    async def _async_get_connection(self) -> bool:
         """Open connection and subscribe to notifications."""
+        self._connection_established.clear()
         self._ble_device = bluetooth.async_ble_device_from_address(
             self._hass, self._address.upper(), True
         )
         async with self._lock:
             if self._client is None:
-                _LOGGER.debug("Connecting")
-                try:
-                    self._client = await self._client_stack.enter_async_context(
-                        BleakClient(
-                            self._ble_device,
-                            # disconnected_callback=self._stop_notify,
-                            timeout=30,
+                attempts = 0
+                while not self.connected and attempts < MAX_CONNECTION_RETRIES:
+                    try:
+                        self._client = await self._client_stack.enter_async_context(
+                            BleakClient(
+                                self._ble_device,
+                                timeout=20,
+                            )
                         )
-                    )
-                except TimeoutError as exc:
-                    _LOGGER.debug("Timeout on connect", exc_info=True)
-                    raise BleakTimeout("Timeout on connect") from exc
-                except BleakError as exc:
-                    _LOGGER.debug("Error on connect", exc_info=True)
-                    raise BleakConnectionFailure("Error on connect") from exc
-            elif not self._client.is_connected:
-                try:
-                    await self._client.connect()
-                except TimeoutError as exc:
-                    _LOGGER.debug("Timeout on connect", exc_info=True)
-                    raise BleakTimeout("Timeout on connect") from exc
-                except BleakError as exc:
-                    _LOGGER.debug("Error on connect", exc_info=True)
-                    raise BleakConnectionFailure("Error on connect") from exc
+                    except TimeoutError as exc:
+                        _LOGGER.debug("Timeout on connect", exc_info=True)
+                        raise BleakTimeout("Timeout on connect") from exc
+                    except BleakError as exc:
+                        _LOGGER.debug("Error on connect", exc_info=True)
+                        raise BleakConnectionFailure("Error on connect") from exc
+                    finally:
+                        attempts += 1
+            elif not self.connected:
+                attempts = 0
+                while not self.connected and attempts < MAX_CONNECTION_RETRIES:
+                    try:
+                        await self._client.connect()
+                    except TimeoutError as exc:
+                        _LOGGER.debug("Timeout on connect", exc_info=True)
+                        raise BleakTimeout("Timeout on connect") from exc
+                    except BleakError as exc:
+                        _LOGGER.debug("Error on connect", exc_info=True)
+                        raise BleakConnectionFailure("Error on connect") from exc
+                    finally:
+                        attempts += 1
             else:
-                _LOGGER.debug("Connection reused")
-        if self._client is not None:
+                _LOGGER.debug("Reusing connection")
+        if self.connected:
+            self._connection_established.set()
+        else:
+            _LOGGER.debug("Abandoning connection to device")
+        await self._connection_established.wait()
+        if self.connected:
             await self._client.start_notify(NOTIFY_UUID, self._catch_nex_response)
+            return True
+        else:
+            return False
 
     # async def _stop_notify(self, client: BleakClient | None) -> None:
     #     if client is not None:
@@ -142,7 +159,6 @@ class NexBTDevice:
         await self._async_get_connection()
         if self._client is not None:
             hello_message = self._hello_message()
-            _LOGGER.debug("Send hello message")
             self._response_received.clear()
             await self._client.write_gatt_char(WRITE_UUID, hello_message, False)
             try:
@@ -181,7 +197,6 @@ class NexBTDevice:
             # this continues a general status message
             self.status_string[self.message_next : self.message_next + len(data)] = data
             self.message_next += len(data)
-            _LOGGER.debug("next message start: %d", self.message_next)
         else:
             # this continues an ack or schedule message - don't need to save this data
             self.message_next += len(data)
@@ -191,7 +206,6 @@ class NexBTDevice:
             if self.status_message == MSG_STATUS:
                 self.status_message = MSG_NONE
                 if self._process_update():
-                    _LOGGER.debug("Update complete and saved")
                     self._response_received.set()
 
     def _process_update(self) -> bool:
