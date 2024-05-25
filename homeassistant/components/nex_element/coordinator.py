@@ -42,7 +42,7 @@ class NexBTCoordinator(DataUpdateCoordinator):
             # update_method=self._async_nex_update_data,
             # mode = bluetooth.BluetoothScanningMode.ACTIVE,
             # connectable=connectable,
-            update_interval=timedelta(seconds=30),
+            update_interval=timedelta(seconds=60),
             always_update=True,
         )
         self.ble_device = ble_device

@@ -6,7 +6,6 @@ import datetime
 import logging
 import re
 from uuid import UUID
-from homeassistant.components import bluetooth
 
 from bleak import BleakClient
 
@@ -15,6 +14,8 @@ from bleak import BleakClient
 from bleak.backends.characteristic import BleakGATTCharacteristic
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
+
+from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
 
 from .const import (
@@ -66,7 +67,7 @@ class NexBTDevice:
             self._hass, self._address.upper(), True
         )
         async with self._lock:
-            if self._client is None or not self._client.is_connected:
+            if self._client is None:
                 _LOGGER.debug("Connecting")
                 try:
                     self._client = await self._client_stack.enter_async_context(
@@ -76,6 +77,15 @@ class NexBTDevice:
                             timeout=30,
                         )
                     )
+                except TimeoutError as exc:
+                    _LOGGER.debug("Timeout on connect", exc_info=True)
+                    raise BleakTimeout("Timeout on connect") from exc
+                except BleakError as exc:
+                    _LOGGER.debug("Error on connect", exc_info=True)
+                    raise BleakConnectionFailure("Error on connect") from exc
+            elif not self._client.is_connected:
+                try:
+                    await self._client.connect()
                 except TimeoutError as exc:
                     _LOGGER.debug("Timeout on connect", exc_info=True)
                     raise BleakTimeout("Timeout on connect") from exc
@@ -98,7 +108,6 @@ class NexBTDevice:
             await self._async_get_connection()
         if self._client is not None:
             await self._async_update_status()
-            await asyncio.sleep(1)
             uuid_str = "{" + WRITE_UUID + "}"
             uuid = UUID(uuid_str)
             command_string = "aaaaaaaa05000084" + hex(round(temp)).replace("0x", "")
@@ -112,7 +121,6 @@ class NexBTDevice:
             await self._async_get_connection()
         if self._client is not None:
             await self._async_update_status()
-            await asyncio.sleep(1)
             uuid_str = "{" + WRITE_UUID + "}"
             uuid = UUID(uuid_str)
             command_string = "aaaaaaaa0500008200"

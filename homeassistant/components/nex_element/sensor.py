@@ -52,7 +52,7 @@ async def async_setup_entry(
         )
     )
     async_add_entities(meters)
-    _LOGGER.debug("add entities done")
+    _LOGGER.debug("add energy sensor entities done")
 
 
 class NexConsumption(CoordinatorEntity, SensorEntity):
