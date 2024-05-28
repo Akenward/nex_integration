@@ -1,4 +1,5 @@
 {
+  "title": "Nex Heated Rail",
   "config": {
     "step": {
       "configure": {
@@ -7,7 +8,7 @@
         "data": {
           "title": "Device name",
           "power": "Power (Watts)",
-          "unit_cost": "Cost per kWh (£)"
+          "unit_cost": "Cost per kWh (\u00a3)"
         }
       }
     },
@@ -18,6 +19,12 @@
     },
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "turned_on": "{entity_name} turned on",
+      "turned_off": "{entity_name} turned off"
     }
   }
 }

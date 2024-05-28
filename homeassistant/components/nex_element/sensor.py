@@ -35,9 +35,9 @@ async def async_setup_entry(
     meters = []
     coordinator: NexBTCoordinator = hass.data[DOMAIN][entry.entry_id]
     idx = "energy_used"
-    name = f"Energy meter {entry.data[CONF_NAME]}"
+    name = f"Energy {entry.data[CONF_NAME]}"
     unique_id = entry.unique_id
-    sensor_entity_id = "energy_sensor_" + str(unique_id)
+    sensor_entity_id = "energy_" + str(unique_id)
     entry_id = entry.entry_id
     address = entry.data[CONF_ADDRESS]
     meters.append(
@@ -52,7 +52,7 @@ async def async_setup_entry(
         )
     )
     async_add_entities(meters)
-    _LOGGER.debug("add energy sensor entities done")
+    _LOGGER.debug("add entities done")
 
 
 class NexConsumption(CoordinatorEntity, SensorEntity):
@@ -77,7 +77,9 @@ class NexConsumption(CoordinatorEntity, SensorEntity):
         self.sensor_entity_id = sensor_entity_id
         self.address = address
         self._name = name
-        self._attr_native_value = self.coordinator.device_data.get("energy_used")
+        self._attr_native_value = str(
+            round(self.coordinator.data.get("energy_used"), 2)
+        )
         self.native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
 
     def update(self) -> None:
@@ -89,7 +91,9 @@ class NexConsumption(CoordinatorEntity, SensorEntity):
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._attr_native_value = self.coordinator.data.get("energy_used")
+        self._attr_native_value = str(
+            round(self.coordinator.data.get("energy_used"), 2)
+        )
         self.async_write_ha_state()
 
     @property

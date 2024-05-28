@@ -6,18 +6,14 @@ import logging
 
 from homeassistant.components import bluetooth
 
-# from homeassistant.components.sensor import SensorEntity
-# from homeassistant.components.water_heater import WaterHeaterEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS, Platform
-from homeassistant.core import HomeAssistant  # , callback
+from homeassistant.core import HomeAssistant, Event
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+)
 
-# from homeassistant.helpers.update_coordinator import (
-# CoordinatorEntity,
-# DataUpdateCoordinator,
-# UpdateFailed,
-# )
 from .const import DOMAIN
 from .coordinator import NexBTCoordinator
 from .NEX_bt_api.nexbt import NexBTDevice
@@ -36,6 +32,7 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.WATER_HEATER]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up nex_element from a config entry."""
+
     assert entry.unique_id is not None
     hass.data.setdefault(DOMAIN, {})
     address: str = entry.data[CONF_ADDRESS]
@@ -56,20 +53,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.title,  # , entry.unique_id
     )
     await coordinator.async_config_entry_first_refresh()
-    # entry.async_on_unload(coordinator.async_start())
-
-    # _LOGGER.debug("Set up device and coordinator")
-    # if not await coordinator.async_wait_ready():
-    #    raise ConfigEntryNotReady(f"{address} is not advertising state")
-
-    # await coordinator.async_update_data()
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
-
+    # heater_entity_id = "water_heater_" + str(entry.unique_id)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    _LOGGER.debug("Listeners keys %s: ", list(coordinator._listeners.keys()))
-
     return True
 
 
@@ -82,5 +70,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
-
     return unload_ok

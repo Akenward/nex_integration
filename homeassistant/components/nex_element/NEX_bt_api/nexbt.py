@@ -70,7 +70,7 @@ class NexBTDevice:
             self._hass, self._address.upper(), True
         )
         async with self._lock:
-            if self._client is None:
+            if not self.connected:
                 attempts = 0
                 while not self.connected and attempts < MAX_CONNECTION_RETRIES:
                     try:
@@ -80,19 +80,6 @@ class NexBTDevice:
                                 timeout=20,
                             )
                         )
-                    except TimeoutError as exc:
-                        _LOGGER.debug("Timeout on connect", exc_info=True)
-                        raise BleakTimeout("Timeout on connect") from exc
-                    except BleakError as exc:
-                        _LOGGER.debug("Error on connect", exc_info=True)
-                        raise BleakConnectionFailure("Error on connect") from exc
-                    finally:
-                        attempts += 1
-            elif not self.connected:
-                attempts = 0
-                while not self.connected and attempts < MAX_CONNECTION_RETRIES:
-                    try:
-                        await self._client.connect()
                     except TimeoutError as exc:
                         _LOGGER.debug("Timeout on connect", exc_info=True)
                         raise BleakTimeout("Timeout on connect") from exc
@@ -114,35 +101,41 @@ class NexBTDevice:
         else:
             return False
 
-    # async def _stop_notify(self, client: BleakClient | None) -> None:
-    #     if client is not None:
-    #         await client.stop_notify(NOTIFY_UUID)
-
     async def async_nex_turn_on(self, temp: float) -> None:
         """Turn NEX device on at given temperature."""
-        if not (self.connected):
-            _LOGGER.debug("No connection ... attempting to connect", exc_info=True)
-            await self._async_get_connection()
+        await self._async_get_connection()
         if self._client is not None:
             await self._async_update_status()
+            self._response_received.clear()
             uuid_str = "{" + WRITE_UUID + "}"
             uuid = UUID(uuid_str)
             command_string = "aaaaaaaa05000084" + hex(round(temp)).replace("0x", "")
             command_bytes = bytearray.fromhex(command_string)
-            await self._client.write_gatt_char(uuid, command_bytes, True)
+            await self._client.write_gatt_char(WRITE_UUID, command_bytes, False)
+            try:
+                async with asyncio.timeout(20):
+                    await self._response_received.wait()
+            except TimeoutError:
+                _LOGGER.debug("Took too long to collect element data")
+        return self.device_data
 
     async def async_nex_turn_off(self) -> None:
         """Turn NEX device off."""
-        if not (self.connected):
-            _LOGGER.debug("No connection ... attempting to connect", exc_info=True)
-            await self._async_get_connection()
+        await self._async_get_connection()
         if self._client is not None:
             await self._async_update_status()
+            self._response_received.clear()
             uuid_str = "{" + WRITE_UUID + "}"
             uuid = UUID(uuid_str)
             command_string = "aaaaaaaa0500008200"
             command_bytes = bytearray.fromhex(command_string)
-            await self._client.write_gatt_char(uuid, command_bytes, True)
+            await self._client.write_gatt_char(WRITE_UUID, command_bytes, False)
+            try:
+                async with asyncio.timeout(20):
+                    await self._response_received.wait()
+            except TimeoutError:
+                _LOGGER.debug("Took too long to collect element data")
+        return self.device_data
 
     def _hello_message(self) -> bytearray:
         timeval = datetime.datetime.now()
@@ -150,12 +143,10 @@ class NexBTDevice:
         timestring_corrected = timestring_raw.replace(";00:", ":07:")
         timestring_compressed = re.sub(":|;", "", timestring_corrected)
         hello_string = "aaaaaaaa0b000083" + timestring_compressed
-        _LOGGER.debug("hello_string %s", hello_string)
         return bytearray.fromhex(hello_string)
 
     async def _async_update_status(self) -> dict:
         """Send hello message to device and return device status data."""
-        # if not (self.connected):
         await self._async_get_connection()
         if self._client is not None:
             hello_message = self._hello_message()
@@ -166,9 +157,6 @@ class NexBTDevice:
                     await self._response_received.wait()
             except TimeoutError:
                 _LOGGER.debug("Took too long to collect element data")
-
-            await self._client.disconnect()
-            _LOGGER.debug("Energy used is %f", self.device_data.get("energy_used"))
         return self.device_data
 
     async def _catch_nex_response(
@@ -188,7 +176,6 @@ class NexBTDevice:
                     self.status_message = MSG_STATUS
                     self.status_string[0 : len(data) - 5] = data[5:]
                     self.message_next = len(data) - 5
-                    _LOGGER.debug("next message start: %d", self.message_next)
                 case 153:
                     # current schedule data
                     self.status_message = MSG_SCHEDULE
@@ -211,7 +198,7 @@ class NexBTDevice:
     def _process_update(self) -> bool:
         op_time = int.from_bytes(self.status_string[35:37], "big")
         self.device_data = {
-            "current_mode": self.status_string[1],
+            "current_state_code": self.status_string[1],
             "current_element_temp": float(self.status_string[4]),
             "target_element_temp": float(self.status_string[5]),
             "lower_temp_limit": float(self.status_string[6]),
