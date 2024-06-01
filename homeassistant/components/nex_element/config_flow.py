@@ -15,36 +15,16 @@ from homeassistant.components.bluetooth import (
 )
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS, CONF_DOMAIN, CONF_NAME
+from homeassistant.helpers import config_validation as cv
 
-# from homeassistant.core import HomeAssistant
+CONF_SHORT_ADDRESS = "short_address"
+
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-
-# async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
-# """Validate the user input allows us to connect.
-# Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
-# """
-# TO**DO validate the data can be used to set up a connection.
-
-# If your PyPI package is not built with async, pass your methods
-# to the executor:
-# await hass.async_add_executor_job(
-#     your_validate_func, data[CONF_USERNAME], data[CONF_PASSWORD]
-# )
-
-# hub = PlaceholderHub(data[CONF_HOST])
-
-
-# If you cannot connect:
-# throw CannotConnect
-# If the authentication is wrong:
-# InvalidAuth
-
-# Return info that you want to store in the config entry.
-# return {"title": "Name of the device"}
 
 
 class NexConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -79,10 +59,6 @@ class NexConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # await self.async_set_unique_id(
-            #    self._discovery_info.address, raise_on_progress=False
-            # )
-            # self._abort_if_unique_id_configured()
             return await self.async_step_configure()
 
         if discovery := self._discovery_info:
@@ -100,7 +76,7 @@ class NexConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not self._discovered_devices:
             return self.async_abort(reason="no_devices_found")
 
-        data_schema = vol.Schema(
+        select_schema = vol.Schema(
             {
                 vol.Required(CONF_ADDRESS): vol.In(
                     {
@@ -113,7 +89,7 @@ class NexConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(
-            step_id="select", data_schema=data_schema, errors=errors
+            step_id="select", data_schema=select_schema, errors=errors
         )
 
     async def async_step_configure(
@@ -124,44 +100,37 @@ class NexConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None and self._discovery_info is not None:
             local_name = self._discovery_info.name
-            title = user_input["title"]
-            power = user_input["power"]
-            unit_cost = user_input["unit_cost"]
+            title = str(user_input["title"])
+            power = str(user_input["power"])
+            unit_cost = str(user_input["unit_cost"])
             return self.async_create_entry(
                 title=local_name,
                 data={
                     CONF_ADDRESS: self._discovery_info.address,
                     CONF_NAME: title,
                     CONF_DOMAIN: DOMAIN,
+                    CONF_SHORT_ADDRESS: self._discovery_info.address.upper()[
+                        9:
+                    ].replace(":", ""),
                     "power": power,
                     "unit_cost": unit_cost,
                 },
             )
 
-        if discovery := self._discovery_info:
-            self._discovered_devices[discovery.address] = discovery
-        else:
-            current_addresses = self._async_current_ids()
-            for discovery in async_discovered_service_info(self.hass):
-                if (
-                    discovery.address in current_addresses
-                    or discovery.address in self._discovered_devices
-                ):
-                    continue
-                self._discovered_devices[discovery.address] = discovery
-
-        if not self._discovered_devices:
-            return self.async_abort(reason="no_devices_found")
-
-        data_schema = vol.Schema(
+        configure_schema = vol.Schema(
             {
                 vol.Required("title"): str,
-                vol.Required("power"): str,
-                vol.Required("unit_cost"): str,
+                vol.Required("power"): vol.All(
+                    vol.Coerce(int), vol.Range(min=0, max=1000)
+                ),
+                vol.Required("unit_cost"): vol.All(
+                    vol.Coerce(float), vol.Range(min=0, max=100)
+                ),
             }
         )
+
         return self.async_show_form(
-            step_id="configure", data_schema=data_schema, errors=errors
+            step_id="configure", data_schema=configure_schema, errors=errors
         )
 
 

@@ -42,13 +42,6 @@ async def async_get_triggers(
     registry = er.async_get(hass)
     triggers = []
 
-    # TODO Read this comment and remove it.
-    # This example shows how to iterate over the entities of this device
-    # that match this integration. If your triggers instead rely on
-    # events fired by devices without entities, do something like:
-    # zha_device = await _async_get_zha_device(hass, device_id)
-    # return zha_device.device_triggers
-
     # Get all the integrations entities for this device
     for entry in er.async_entries_for_device(registry, device_id):
         if entry.domain != DOMAIN:

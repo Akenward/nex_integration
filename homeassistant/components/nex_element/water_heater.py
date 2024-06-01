@@ -23,6 +23,8 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 
+CONF_SHORT_ADDRESS = "short_address"
+
 from homeassistant.components.water_heater.const import (
     STATE_ECO,
 )
@@ -49,10 +51,11 @@ from .coordinator import NexBTCoordinator
 NEX_TARGET_TEMPERATURE = WaterHeaterEntityFeature.TARGET_TEMPERATURE
 NEX_OPERATION_MODE = WaterHeaterEntityFeature.OPERATION_MODE
 NEX_AWAY_MODE = WaterHeaterEntityFeature.AWAY_MODE
+NEX_ON_OFF = WaterHeaterEntityFeature.ON_OFF
 
 _LOGGER = logging.getLogger(__name__)
 
-SUPPORT_FLAGS_HEATER = NEX_TARGET_TEMPERATURE | NEX_OPERATION_MODE | NEX_AWAY_MODE
+SUPPORT_FLAGS_HEATER = NEX_OPERATION_MODE | NEX_TARGET_TEMPERATURE | NEX_AWAY_MODE
 
 
 async def async_setup_entry(
@@ -62,13 +65,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up the heated rail."""
     rails = []
-    unique_id = entry.unique_id
     coordinator: NexBTCoordinator = hass.data[DOMAIN][entry.entry_id]
-    idx = "water_heater"
-    name = f"Heater {entry.data[CONF_NAME]}"
-    unique_id = entry.unique_id
-    heater_entity_id = "heater_" + str(unique_id)
-    sensor_entity_id = "temp_" + str(unique_id)
+    name = f"Nex element {entry.data[CONF_SHORT_ADDRESS]}"
     entry_id = entry.entry_id
     address = entry.data[CONF_ADDRESS]
     unit = hass.config.units.temperature_unit
@@ -76,14 +74,10 @@ async def async_setup_entry(
     rails.append(
         NexHeatedRail(
             coordinator,
-            idx,
-            unique_id,
+            name,
             entry_id,
-            heater_entity_id,
-            sensor_entity_id,
             address,
             unit,
-            name,
         )
     )
 
@@ -97,26 +91,26 @@ class NexHeatedRail(CoordinatorEntity, WaterHeaterEntity, RestoreEntity):
     def __init__(
         self,
         coordinator: NexBTCoordinator,
-        idx,
-        unique_id,
+        name,
         entry_id,
-        heater_entity_id,
-        sensor_entity_id,
         address,
         unit,
-        name,
     ) -> None:
         """Set up water heater object."""
-        super().__init__(coordinator, context=idx)
+        super().__init__(coordinator)
         self.coordinator = coordinator
-        self.idx = idx
-        self.unique_id = unique_id
+        self._attr_name = name + " heater"
+        self.device_name = name
+        self.unique_id = (self._attr_name.lower() + "_heater").replace(" ", "_")
         self.entry_id = entry_id
-        self.heater_entity_id = heater_entity_id
-        self.sensor_entity_id = sensor_entity_id
+        self.heater_entity_id = (self._attr_name.lower() + "_heater_element").replace(
+            " ", "_"
+        )
+        self.sensor_entity_id = (
+            self._attr_name.lower() + "_heater_temperature"
+        ).replace(" ", "_")
         self.address = address
         self._attr_temperature_unit = unit
-        self._name = name
         self._operation_list = [
             STATE_ON,
             STATE_OFF,
@@ -150,7 +144,7 @@ class NexHeatedRail(CoordinatorEntity, WaterHeaterEntity, RestoreEntity):
                 # Serial numbers are unique identifiers within a specific domain
                 (self.entry_id, self.address)
             },
-            name=self._name,
+            name=self.device_name,
             manufacturer="HeatQ",
             model="NEX",
             sw_version="1.0",
@@ -207,7 +201,6 @@ class NexHeatedRail(CoordinatorEntity, WaterHeaterEntity, RestoreEntity):
         self._attr_is_away_mode_on = True
         self._attr_current_operation = STATE_ON
         self._attr_target_temperature = self._attr_min_temp
-        _LOGGER.debug("Away mode set on")
         await self.coordinator.device.async_nex_turn_on(self._attr_min_temp)
         self.async_write_ha_state()
 
@@ -216,12 +209,10 @@ class NexHeatedRail(CoordinatorEntity, WaterHeaterEntity, RestoreEntity):
         self._attr_is_away_mode_off = False
         self._attr_current_operation = STATE_OFF
         self._attr_target_temperature = (self._attr_min_temp + self._attr_max_temp) / 2
-        _LOGGER.debug("Away mode set off")
         await self.coordinator.device.async_nex_turn_off()
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        _LOGGER.debug("**** Set target temperature")
         """Set new target temperatures."""
         self._attr_target_temperature = kwargs.get(ATTR_TEMPERATURE)
         if self._attr_current_operation == STATE_ON:
@@ -253,10 +244,11 @@ class NexHeatedRail(CoordinatorEntity, WaterHeaterEntity, RestoreEntity):
         """Handle temperature changes."""
         new_state = event.data.get("new_state")
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-            await self._async_heater_turn_off()
+            # await self._async_heater_turn_off()
             self._attr_current_temperature = None
         else:
             self._attr_current_temperature = float(new_state.state)
+        self.async_write_ha_state()
 
     @callback
     def _async_switch_changed(self, event: Event):
@@ -267,7 +259,7 @@ class NexHeatedRail(CoordinatorEntity, WaterHeaterEntity, RestoreEntity):
             self._attr_available = False
         else:
             self._attr_available = True
-            _LOGGER.debug("%s became Available", self.name)
+            _LOGGER.debug("%s became Available", self._attr_name)
             if new_state.state == STATE_ON and self._current_operation == STATE_OFF:
                 self._attr_current_operation = STATE_ON
                 _LOGGER.debug("STATE_ON")

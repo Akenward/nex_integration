@@ -17,10 +17,10 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+CONF_SHORT_ADDRESS = "short_address"
+
 from .const import DOMAIN
 
-# from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-#  from homeassistant.helpers.entity import async_generate_entity_id
 from .coordinator import NexBTCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,25 +34,19 @@ async def async_setup_entry(
     """Set up the sensor platform."""
     meters = []
     coordinator: NexBTCoordinator = hass.data[DOMAIN][entry.entry_id]
-    idx = "energy_used"
-    name = f"Energy {entry.data[CONF_NAME]}"
-    unique_id = entry.unique_id
-    sensor_entity_id = "energy_" + str(unique_id)
+    name = f"Nex element {entry.data[CONF_SHORT_ADDRESS]}"
     entry_id = entry.entry_id
     address = entry.data[CONF_ADDRESS]
     meters.append(
         NexConsumption(
             coordinator,
-            idx,
-            unique_id,
             entry_id,
-            sensor_entity_id,
             address,
             name,
         )
     )
     async_add_entities(meters)
-    _LOGGER.debug("add entities done")
+    _LOGGER.debug("add energy sensors done")
 
 
 class NexConsumption(CoordinatorEntity, SensorEntity):
@@ -61,26 +55,22 @@ class NexConsumption(CoordinatorEntity, SensorEntity):
     def __init__(
         self,
         coordinator: NexBTCoordinator,
-        idx,
-        unique_id,
         entry_id,
-        sensor_entity_id,
         address,
         name,
     ) -> None:
         """Initialise NexConsumption entity."""
-        super().__init__(coordinator, context=idx)
-        self.idx = idx
+        super().__init__(coordinator)
         self.coordinator = coordinator
-        self._unique_id = unique_id
         self.entry_id = entry_id
-        self.sensor_entity_id = sensor_entity_id
         self.address = address
-        self._name = name
+        self._attr_name = name + " energy"
+        self.device_name = name
         self._attr_native_value = str(
             round(self.coordinator.data.get("energy_used"), 2)
         )
         self.native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+        self._attr_unique_id = self._attr_name.lower().replace(" ", "_")
 
     def update(self) -> None:
         """Fetch new state data for the sensor.
@@ -104,7 +94,7 @@ class NexConsumption(CoordinatorEntity, SensorEntity):
                 # Serial numbers are unique identifiers within a specific domain
                 (self.entry_id, self.address)
             },
-            name=self.name,
+            name=self.device_name,
             manufacturer="HeatQ",
             model="NEX",
             sw_version="1.0",
@@ -113,14 +103,13 @@ class NexConsumption(CoordinatorEntity, SensorEntity):
     @property
     def name(self) -> str:
         """Nex sensor name."""
-        return self._name
+        return self._attr_name
 
     @property
     def unique_id(self) -> str:
         """Unique identifier."""
-        return self._unique_id
+        return self._attr_unique_id
 
-    @property
     def device_class(self) -> SensorDeviceClass | None:
         """Device class."""
         return SensorDeviceClass.ENERGY
