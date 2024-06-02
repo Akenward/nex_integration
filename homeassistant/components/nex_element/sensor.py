@@ -63,6 +63,10 @@ class NexConsumption(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.coordinator = coordinator
         self.entry_id = entry_id
+        self._attr_name = name + " energy"
+        self.sensor_entity_id = (self._attr_name.lower() + "_energy_sensor").replace(
+            " ", "_"
+        )
         self.address = address
         self._attr_name = name + " energy"
         self.device_name = name
@@ -110,6 +114,7 @@ class NexConsumption(CoordinatorEntity, SensorEntity):
         """Unique identifier."""
         return self._attr_unique_id
 
+    @property
     def device_class(self) -> SensorDeviceClass | None:
         """Device class."""
         return SensorDeviceClass.ENERGY
