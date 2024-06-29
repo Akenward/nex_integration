@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# from .const import DOMAIN
 import logging
 
 from homeassistant.components.sensor import (
@@ -11,16 +10,13 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_ADDRESS, CONF_NAME, UnitOfEnergy
-from homeassistant.core import HomeAssistant
+from homeassistant.const import CONF_ADDRESS, UnitOfEnergy
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-CONF_SHORT_ADDRESS = "short_address"
-
-from .const import DOMAIN
-
+from .const import CONF_SHORT_ADDRESS, DOMAIN
 from .coordinator import NexBTCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,7 +46,7 @@ async def async_setup_entry(
 
 
 class NexConsumption(CoordinatorEntity, SensorEntity):
-    """Represent a NEX Sensor."""
+    """Track Nex energy consumption ."""
 
     def __init__(
         self,
@@ -70,25 +66,26 @@ class NexConsumption(CoordinatorEntity, SensorEntity):
         self.address = address
         self._attr_name = name + " energy"
         self.device_name = name
-        self._attr_native_value = str(
-            round(self.coordinator.data.get("energy_used"), 2)
-        )
+        if self.coordinator.data.get("energy_used") is not None:
+            self._attr_native_value = str(
+                round(self.coordinator.data.get("energy_used"), 2)
+            )
         self.native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
         self._attr_unique_id = self._attr_name.lower().replace(" ", "_")
 
     def update(self) -> None:
-        """Fetch new state data for the sensor.
+        """Fetch new state data for the sensor."""
 
-        This is the only method that should fetch new data for Home Assistant.
-        """
-        self._attr_native_value = self.coordinator.data.get("energy_used")
+        if self.coordinator.data.get("energy_used") is not None:
+            self._attr_native_value = str(
+                round(self.coordinator.data.get("energy_used"), 2)
+            )
+        self.async_write_ha_state()
 
+    @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._attr_native_value = str(
-            round(self.coordinator.data.get("energy_used"), 2)
-        )
-        self.async_write_ha_state()
+        self.update()
 
     @property
     def device_info(self) -> DeviceInfo:

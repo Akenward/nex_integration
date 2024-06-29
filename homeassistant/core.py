@@ -2498,6 +2498,7 @@ class ServiceRegistry:
             service = service.lower()
             try:
                 handler = self._services[domain][service]
+                _LOGGER.debug("Service found: %s", handler)
             except KeyError:
                 raise ServiceNotFound(domain, service) from None
 

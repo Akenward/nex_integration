@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
+from typing import Any
 
 from homeassistant.components import bluetooth
-
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_ADDRESS, Platform, CONF_NAME
-from homeassistant.core import HomeAssistant, Event
+from homeassistant.const import CONF_ADDRESS, CONF_NAME, Platform
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.event import (
-    async_track_state_change_event,
-)
 
-SHORT_ADDRESS = "short_address"
-from .const import DOMAIN
+from .const import (
+    CONNECT_ATTEMPT_SECS,
+    CONNECT_TRIES,
+    DOMAIN,
+    INTERVAL_SECS,
+    NOTIFY_TRIES,
+    POWER,
+)
 from .coordinator import NexBTCoordinator
 from .NEX_bt_api.nexbt import NexBTDevice
 
@@ -35,23 +39,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(
             f"Could not find Generic BT Device with address {address}"
         )
-    power = entry.data["power"]
-    unit_cost = entry.data["unit_cost"]
-    nex_device = NexBTDevice(hass, ble_device, power, unit_cost)
-    title = entry.data[CONF_NAME]
+    new_data: dict[str:Any] = {**entry.data, **entry.options}
+    power = new_data.get(POWER)
+    params = {
+        "connect_tries": new_data.get(CONNECT_TRIES),
+        "connect_timeout": new_data.get(CONNECT_ATTEMPT_SECS),
+        "notify_tries": new_data.get(NOTIFY_TRIES),
+    }
+    interval = timedelta(seconds=new_data.get(INTERVAL_SECS))
 
-    coordinator = NexBTCoordinator(
-        hass,
-        _LOGGER,
-        ble_device,
-        nex_device,
-        title,  # local name e.g. Hall rail
-    )
-    _LOGGER.debug("Entry title in init: %s", title)
+    if entry.entry_id in hass.data[DOMAIN]:
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        coordinator.interval = interval
+        if hasattr(coordinator, "device"):
+            coordinator.device.power = power
+            coordinator.params = params
+    else:
+        nex_device = NexBTDevice(hass, ble_device, power, params)
+        title = entry.data[CONF_NAME]
+        coordinator = NexBTCoordinator(
+            hass,
+            _LOGGER,
+            ble_device,
+            nex_device,
+            interval,
+            title,  # local name e.g. Bathroom Towel Heater
+        )
+        hass.data.setdefault(DOMAIN, {})
+        hass.data[DOMAIN][entry.entry_id] = coordinator
+        entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await coordinator.async_config_entry_first_refresh()
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = coordinator
-    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

@@ -11,20 +11,30 @@
           "unit_cost": "Cost per kWh (\u00a3)"
         }
       }
-    },
-    "error": {
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-      "unknown": "[%key:common::config_flow::error::unknown%]"
-    },
-    "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
     }
   },
-  "device_automation": {
-    "trigger_type": {
-      "turned_on": "{entity_name} turned on",
-      "turned_off": "{entity_name} turned off"
+  "options": {
+    "step": {
+      "init": {
+        "title": "Parameters",
+        "description": "Performance customisation",
+        "data": {
+          "power": "Element power",
+          "interval_secs": "Update interval",
+          "connect_tries": "Max connection tries",
+          "connect_attempt_secs": "Connection attempt timeout",
+          "notify_tries": "Max notification tries"
+        }
+      }
     }
+  },
+  "error": {
+    "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+    "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+    "unknown": "[%key:common::config_flow::error::unknown%]"
+  },
+  "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
   }
 }
+

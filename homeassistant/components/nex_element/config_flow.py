@@ -15,14 +15,25 @@ from homeassistant.components.bluetooth import (
 )
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS, CONF_DOMAIN, CONF_NAME
+from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
-CONF_SHORT_ADDRESS = "short_address"
-
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
-
-from .const import DOMAIN
+from .const import (
+    CONF_SHORT_ADDRESS,
+    CONNECT_ATTEMPT_SECS,
+    CONNECT_TRIES,
+    DEFAULT_CONNECT_ATTEMPT_SECS,
+    DEFAULT_CONNECT_TRIES,
+    DEFAULT_INTERVAL_SECS,
+    DEFAULT_NOTIFY_TRIES,
+    DEFAULT_POWER,
+    DOMAIN,
+    INTERVAL_SECS,
+    NOTIFY_TRIES,
+    POWER,
+    TITLE,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -99,44 +110,85 @@ class NexConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None and self._discovery_info is not None:
-            local_name = self._discovery_info.name
-            title = str(user_input["title"])
-            power = str(user_input["power"])
-            unit_cost = str(user_input["unit_cost"])
-            return self.async_create_entry(
-                title=local_name,
-                data={
-                    CONF_ADDRESS: self._discovery_info.address,
-                    CONF_NAME: title,
-                    CONF_DOMAIN: DOMAIN,
-                    CONF_SHORT_ADDRESS: self._discovery_info.address.upper()[
-                        9:
-                    ].replace(":", ""),
-                    "power": power,
-                    "unit_cost": unit_cost,
-                },
-            )
+            title = (self._discovery_info.name,)
+            data = {
+                CONF_ADDRESS: self._discovery_info.address,
+                CONF_NAME: str(user_input[TITLE]),
+                CONF_DOMAIN: DOMAIN,
+                INTERVAL_SECS: int(DEFAULT_INTERVAL_SECS),
+                CONNECT_TRIES: int(DEFAULT_CONNECT_TRIES),
+                CONNECT_ATTEMPT_SECS: int(DEFAULT_CONNECT_ATTEMPT_SECS),
+                NOTIFY_TRIES: int(DEFAULT_NOTIFY_TRIES),
+                CONF_SHORT_ADDRESS: self._discovery_info.address.upper()[9:].replace(
+                    ":", ""
+                ),
+                POWER: int(user_input[POWER]),
+            }
+            return self.async_create_entry(title=title, data=data)
 
         configure_schema = vol.Schema(
-            {
-                vol.Required("title"): str,
-                vol.Required("power"): vol.All(
-                    vol.Coerce(int), vol.Range(min=0, max=1000)
-                ),
-                vol.Required("unit_cost"): vol.All(
-                    vol.Coerce(float), vol.Range(min=0, max=100)
-                ),
-            }
+            {vol.Required(TITLE): cv.string, vol.Required(POWER): cv.positive_int}
         )
 
         return self.async_show_form(
             step_id="configure", data_schema=configure_schema, errors=errors
         )
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return OptionsFlowHandler(config_entry)
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Capture revised operational parameters."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+        option_schema = vol.Schema(
+            {
+                vol.Optional(
+                    POWER, default=self.config_entry.options.get(POWER, DEFAULT_POWER)
+                ): cv.positive_int,
+                vol.Optional(
+                    INTERVAL_SECS,
+                    default=self.config_entry.options.get(
+                        INTERVAL_SECS, DEFAULT_INTERVAL_SECS
+                    ),
+                ): cv.positive_int,
+                vol.Optional(
+                    CONNECT_TRIES,
+                    default=self.config_entry.options.get(
+                        CONNECT_TRIES, DEFAULT_CONNECT_TRIES
+                    ),
+                ): cv.positive_int,
+                vol.Optional(
+                    CONNECT_ATTEMPT_SECS,
+                    default=self.config_entry.options.get(
+                        CONNECT_ATTEMPT_SECS, DEFAULT_CONNECT_ATTEMPT_SECS
+                    ),
+                ): cv.positive_int,
+                vol.Optional(
+                    NOTIFY_TRIES,
+                    default=self.config_entry.options.get(
+                        NOTIFY_TRIES, DEFAULT_NOTIFY_TRIES
+                    ),
+                ): cv.positive_int,
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=option_schema)
+
 
 class CannotConnect(HomeAssistantError):
     """Error to indicate we cannot connect."""
-
-
-class InvalidAuth(HomeAssistantError):
-    """Error to indicate there is invalid auth."""

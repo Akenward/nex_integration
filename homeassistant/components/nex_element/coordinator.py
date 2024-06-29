@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 from datetime import timedelta
 import logging
 
@@ -13,7 +11,6 @@ from homeassistant.components import bluetooth
 from homeassistant.core import CoreState, HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import DEVICE_STARTUP_TIMEOUT_SECONDS
 from .NEX_bt_api.nexbt import NexBTDevice
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,8 +25,8 @@ class NexBTCoordinator(DataUpdateCoordinator):
         logger: logging.Logger,
         ble_device: BLEDevice,
         device: NexBTDevice,
+        interval: timedelta,
         device_name: str,
-        # connectable: bool,
     ) -> None:
         """Initialize my coordinator."""
 
@@ -37,14 +34,13 @@ class NexBTCoordinator(DataUpdateCoordinator):
             hass=hass,
             logger=logger,
             name=device_name,
-            update_interval=timedelta(seconds=60),
+            update_interval=interval,
             always_update=True,
         )
         self.ble_device = ble_device
         self.device = device
         self.device_name = device_name
-        self._ready_event = asyncio.Event()
-        self._was_unavailable = True  #
+        self._was_unavailable = True
 
     @callback
     def _needs_poll(
@@ -67,16 +63,7 @@ class NexBTCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict:
         """Poll the device."""
-        async with asyncio.timeout(25):
-            return await self.device.async_update_status()
-
-    async def async_wait_ready(self) -> bool:
-        """Wait for the device to be ready."""
-        with contextlib.suppress(asyncio.TimeoutError):
-            async with asyncio.timeout(DEVICE_STARTUP_TIMEOUT_SECONDS):
-                await self._ready_event.wait()
-                return True
-        return False
+        return await self.device.async_update_status()
 
     @property
     def device_data(self) -> dict:
